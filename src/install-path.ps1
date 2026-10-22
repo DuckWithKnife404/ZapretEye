@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  ZapretEye (zeye) - install engine path into C:\zeye-tools
 #  Copies zeye.bat to C:\zeye-tools\, writes config-path.txt with
 #  the real ZapretEye root and adds the folder to the user PATH.
