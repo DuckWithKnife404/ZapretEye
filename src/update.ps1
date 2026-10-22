@@ -37,8 +37,12 @@ function Copy-TreeOver([string]$From, [string]$To) {
 
 try {
     # ---- paths -------------------------------------------------
-    $srcDir  = Split-Path -Parent $MyInvocation.MyCommand.Path   # <root>\src
-    $root    = Split-Path -Parent $srcDir                        # <root>
+    # Resolve the script dir robustly ($MyInvocation.MyCommand.Path is
+    # empty when the file is dot-sourced).
+    $scriptPath = $MyInvocation.MyCommand.Path
+    if (-not $scriptPath) { $scriptPath = (Get-PSCallStack)[0].ScriptName }
+    $srcDir  = Split-Path -Parent $scriptPath                      # <root>\src
+    $root    = Split-Path -Parent $srcDir                           # <root>
     $engine  = Join-Path $root 'zapret-engine'
     $verFile = Join-Path $engine 'version.txt'
 
@@ -78,7 +82,10 @@ try {
     # ---- download silently to %TEMP% ---------------------------
     $zip     = Join-Path $env:TEMP ('zapret-' + $latest + '.zip')
     $extract = Join-Path $env:TEMP ('zapret-extract-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    # --fail: without it curl exits 0 on HTTP errors (404/403 rate limit) and
+    # Expand-Archive then chokes on an HTML error page instead of a zip.
     Invoke-Curl @('-L', '-sS', '--fail', '--max-time', '600', '-o', $zip, $zipUrl) | Out-Null
+    if ((Get-Item $zip).Length -lt 10240) { throw 'Скачанный файл слишком мал — похоже, релиз не доступен.' }
 
     if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
     New-Item -ItemType Directory -Path $extract | Out-Null

@@ -19,7 +19,11 @@ $ErrorActionPreference = 'Continue'
 
 try {
     if ([string]::IsNullOrEmpty($Engine)) {
-        $srcDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+        # Resolve the script dir robustly ($MyInvocation.MyCommand.Path is
+        # empty when the file is dot-sourced).
+        $scriptPath = $MyInvocation.MyCommand.Path
+        if (-not $scriptPath) { $scriptPath = (Get-PSCallStack)[0].ScriptName }
+        $srcDir = Split-Path -Parent $scriptPath
         $root   = Split-Path -Parent $srcDir
         $Engine = Join-Path $root 'zapret-engine'
     }
@@ -59,7 +63,8 @@ try {
         Start-Sleep -Seconds 2
 
         # single HTTPS probe through the zapret tunnel
-        $res = & curl.exe -o NUL -s -w '%{http_code} %{time_total}' --max-time $Timeout $Url 2>$null
+        # --noproxy '*': never reuse system proxy env vars for the probe
+        $res = & curl.exe --noproxy '*' -o NUL -s -w '%{http_code} %{time_total}' --max-time $Timeout $Url 2>$null
         $parts = ($res + '') -split ' '
         $code  = $parts[0]
         $timeS = $parts[1]

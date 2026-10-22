@@ -9,7 +9,11 @@ $ErrorActionPreference = 'Stop'
 
 try {
     # Root of the repository (this script lives in <root>\src\)
-    $srcDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
+    # Resolve the script dir robustly ($MyInvocation.MyCommand.Path is
+    # empty when the file is dot-sourced).
+    $scriptPath = $MyInvocation.MyCommand.Path
+    if (-not $scriptPath) { $scriptPath = (Get-PSCallStack)[0].ScriptName }
+    $srcDir   = Split-Path -Parent $scriptPath
     $zeyeRoot = Split-Path -Parent $srcDir
 
     $toolsDir = 'C:\zeye-tools'

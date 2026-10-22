@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - rollback of install-path.ps1
 rem  Removes C:\zeye-tools from the user PATH and deletes it.

@@ -17,8 +17,12 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# ---- locate paths (this file lives in <root>\src\) ------------
-$srcDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# ---- locate paths (this file lives in <root>\src\) -------------
+# Resolve the script dir robustly: $MyInvocation.MyCommand.Path is empty
+# when the file is dot-sourced, so fall back to Get-PSCallStack[0].
+$scriptPath = $MyInvocation.MyCommand.Path
+if (-not $scriptPath) { $scriptPath = (Get-PSCallStack)[0].ScriptName }
+$srcDir = Split-Path -Parent $scriptPath
 $root   = Split-Path -Parent $srcDir
 $engine      = Join-Path $root 'zapret-engine'
 $iconPath    = Join-Path $root 'assets\icon.ico'

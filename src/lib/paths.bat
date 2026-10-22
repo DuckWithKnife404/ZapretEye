@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - shared paths
 rem  Include with:  cd /d "%~dp0" ^&^& call paths.bat
