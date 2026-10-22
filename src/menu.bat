@@ -93,7 +93,11 @@ echo.
 echo  Выбери стратегию по умолчанию (она станет автоматической):
 echo.
 set /a N=0
-for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\profiles.ps1`) do (
+rem  pass the engine folder explicitly: if menu.bat is launched from a copy
+rem  of the repo (or profiles.ps1 was moved), walking up from the script's
+rem  own location would point at the wrong zapret-engine\ and the list
+rem  would come back empty even though the .bat files exist.
+for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\profiles.ps1 -EngineDir "%ZEYE_ENGINE%"`) do (
     set /a N+=1
     set "PROFILE_!N!=%%F"
     set "ARGS_!N!=%%G"

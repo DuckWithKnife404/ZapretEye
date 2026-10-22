@@ -12,11 +12,28 @@
 #  is immune to that.
 # ============================================================
 
+param(
+    # Optional explicit engine folder. When the script is run from a copy
+    # (e.g. C:\zeye-tools after install-path.ps1) or by an editor that
+    # dot-sources it, $PSScriptRoot may not point at the repo root, so we
+    # fall back to walking up from the script location. Passing -EngineDir
+    # removes all guesswork.
+    [string]$EngineDir
+)
+
 $ErrorActionPreference = 'Stop'
 try {
-    $srcDir = Split-Path -Parent $MyInvocation.MyCommand.Path   # <root>\src\lib
-    $root   = Split-Path -Parent (Split-Path -Parent $srcDir)   # <root>
-    $engine = Join-Path $root 'zapret-engine'
+    if ($EngineDir) {
+        $engine = (Resolve-Path -LiteralPath $EngineDir -ErrorAction SilentlyContinue)
+        if ($engine) { $engine = $engine.Path } else { $engine = $EngineDir }
+    } else {
+        # PS 2.0 has no $PSScriptRoot; $MyInvocation can be empty when the
+        # file is dot-sourced. Try both, then walk up two levels from lib\.
+        $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+        if (-not $scriptDir) { $scriptDir = (Get-PSCallStack)[0].ScriptName | ForEach-Object { Split-Path -Parent $_ } }
+        $root   = Split-Path -Parent (Split-Path -Parent $scriptDir)   # <root>
+        $engine = Join-Path $root 'zapret-engine'
+    }
 
     if (-not (Test-Path -LiteralPath $engine)) { exit 0 }
 
