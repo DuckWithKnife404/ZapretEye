@@ -76,6 +76,16 @@ rem ---- first run: pick a strategy (it becomes the automatic one)
 if not "!DSTRAT!"=="" goto :launch
 goto :pickstrategy
 
+rem ============================================================
+rem  Strategy picker. NOTE: the old implementation used a cmd
+rem  "for %%F in ("%ZEYE_ENGINE%\*.bat")" glob, which silently made
+rem  zero iterations under console codepage 65001 on some Windows
+rem  builds -> ".bat стратегии не найдены в движке" even though the
+rem  files were on disk. The listing is now done by lib\profiles.ps1
+rem  (Get-ChildItem - the same call check.ps1 uses successfully).
+rem  Each line of its output is "<file>.bat|<arguments>", so PROFILE_N
+rem  keeps holding the real file name (with .bat) exactly as before.
+rem ============================================================
 :pickstrategy
 set "DSTRAT="
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key default_strategy`) do set "DSTRAT=%%A"
@@ -83,15 +93,13 @@ echo.
 echo  Выбери стратегию по умолчанию (она станет автоматической):
 echo.
 set /a N=0
-for %%F in ("%ZEYE_ENGINE%\*.bat") do (
-    rem skip helper scripts that are not strategies (same rule as check.ps1)
-    if /i not "%%~nxF"=="service.bat" if /i not "%%~nxF"=="uninstall_service.bat" if /i not "%%~nxF"=="update.bat" if /i not "%%~nxF"=="check.bat" (
-        set /a N+=1
-        set "PROFILE_!N!=%%~nxF"
-        echo    !N!. %%~nxF
-    )
+for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\profiles.ps1`) do (
+    set /a N+=1
+    set "PROFILE_!N!=%%F"
+    set "ARGS_!N!=%%G"
+    if not "%%G"=="" (echo    !N!. %%F  [%%G]) else (echo    !N!. %%F)
 )
-if %N%==0 ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
+if "%N%"=="0" ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
 echo.
 set "SEL="
 set /p "SEL=  Номер: "
