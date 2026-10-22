@@ -21,11 +21,14 @@ try {
     if (-not (Test-Path -LiteralPath $engine)) { exit 0 }
 
     # helper scripts that ship inside the release but are not strategies
-    $skip = @('service.bat', 'uninstall_service.bat', 'update.bat', 'check.bat',
-              'restart.bat', 'run_fast.bat', 'run_general.bat')
+    $skipNames = @('service.bat', 'uninstall_service.bat', 'update.bat', 'check.bat',
+                   'restart.bat', 'run_fast.bat', 'run_general.bat')
+    # zeye's own helpers / leftovers copied into the engine folder
+    $skipPrefixes = @('zeye-', '_zeye')
 
-    foreach ($f in (Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File | Sort-Object Name)) {
-        if ($skipPrefixes | Where-Object { $f.Name.ToLower().StartsWith($_) }) { continue }
+    foreach ($f in @(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File | Sort-Object Name)) {
+        if ($f.Name -in $skipNames) { continue }
+        if (@($skipPrefixes | Where-Object { $f.Name.ToLower().StartsWith($_) }).Count -gt 0) { continue }
         $argLine = ''
         try {
             # Flowseal profiles invoke the engine like:

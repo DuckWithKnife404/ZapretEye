@@ -99,7 +99,7 @@ for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPo
     set "ARGS_!N!=%%G"
     if not "%%G"=="" (echo    !N!. %%F  [%%G]) else (echo    !N!. %%F)
 )
-if "%N%"=="0" ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
+if %N%==0 ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
 echo.
 set "SEL="
 set /p "SEL=  Номер: "
