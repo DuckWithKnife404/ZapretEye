@@ -1,0 +1,45 @@
+From 0da4834b4c0cf2ed7f7b1d7630c9f949d56386b6 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:14:19 +0000
+Subject: [PATCH 2/8] fix(update): trust version.txt only if engine files
+ exist; redownload broken/empty engine
+
+---
+ src/update.ps1 | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/src/update.ps1 b/src/update.ps1
+index c31437d..a625be6 100644
+--- a/src/update.ps1
++++ b/src/update.ps1
+@@ -80,11 +80,25 @@ try {
+     $local = ''
+     if (Test-Path $verFile) { $local = ((Get-Content $verFile -First 1) + '').Trim() }
+ 
+-    if (($local -eq $latest) -and (-not $Force)) {
++    Write-Host ('[zeye] Локальная версия: ' + $(if ($local) { $local } else { 'нет' }) + ' -> новая: ' + $latest)
++
++    # ---- is the installed engine actually usable? --------------
++    # If a previous run was interrupted mid-copy (or files were deleted by
++    # hand), version.txt can claim the engine is current while winws.exe and
++    # the strategy .bat files are gone. Then an early "Уже актуально" would
++    # skip the download and menu.bat would fail with
++    # ".bat стратегии не найдены в движке". So only trust version.txt when
++    # the binaries are really on disk; otherwise force a redownload.
++    $engineOk = (Test-Path (Join-Path $engine 'winws.exe')) -and
++                (@(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File -ErrorAction SilentlyContinue).Count -gt 0)
++
++    if (($local -eq $latest) -and (-not $Force) -and $engineOk) {
+         Write-Host "[zeye] Уже актуально: $latest"
+         exit 0
+     }
+-    Write-Host ('[zeye] Локальная версия: ' + $(if ($local) { $local } else { 'нет' }) + ' -> новая: ' + $latest)
++    if (($local -eq $latest) -and (-not $Force) -and -not $engineOk) {
++        Write-Host '[zeye] Папка движка повреждена или пуста — скачиваю заново...'
++    }
+ 
+     # stop the engine while replacing binaries.
+     # NOTE: do NOT use taskkill here - when winws.exe is not running it prints
+-- 
+2.39.5
+

@@ -1,0 +1,71 @@
+From 2c6c395eafa7b6520d92e8e41234a11e0e894342 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:26:29 +0000
+Subject: [PATCH 8/8] fix(profiles): pass engine dir explicitly; robust
+ script-root detection
+
+menu.bat now calls profiles.ps1 with -EngineDir "%ZEYE_ENGINE%", so the
+listing always reads the same zapret-engine\ folder that paths.bat/update.ps1
+use, even when the repo was copied or the helper moved. profiles.ps1 falls
+back to $PSScriptRoot (PS3+) before walking up from its own location.
+---
+ src/lib/profiles.ps1 | 23 ++++++++++++++++++++---
+ src/menu.bat         |  6 +++++-
+ 2 files changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/src/lib/profiles.ps1 b/src/lib/profiles.ps1
+index dd5f748..378ad38 100644
+--- a/src/lib/profiles.ps1
++++ b/src/lib/profiles.ps1
+@@ -12,11 +12,28 @@
+ #  is immune to that.
+ # ============================================================
+ 
++param(
++    # Optional explicit engine folder. When the script is run from a copy
++    # (e.g. C:\zeye-tools after install-path.ps1) or by an editor that
++    # dot-sources it, $PSScriptRoot may not point at the repo root, so we
++    # fall back to walking up from the script location. Passing -EngineDir
++    # removes all guesswork.
++    [string]$EngineDir
++)
++
+ $ErrorActionPreference = 'Stop'
+ try {
+-    $srcDir = Split-Path -Parent $MyInvocation.MyCommand.Path   # <root>\src\lib
+-    $root   = Split-Path -Parent (Split-Path -Parent $srcDir)   # <root>
+-    $engine = Join-Path $root 'zapret-engine'
++    if ($EngineDir) {
++        $engine = (Resolve-Path -LiteralPath $EngineDir -ErrorAction SilentlyContinue)
++        if ($engine) { $engine = $engine.Path } else { $engine = $EngineDir }
++    } else {
++        # PS 2.0 has no $PSScriptRoot; $MyInvocation can be empty when the
++        # file is dot-sourced. Try both, then walk up two levels from lib\.
++        $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
++        if (-not $scriptDir) { $scriptDir = (Get-PSCallStack)[0].ScriptName | ForEach-Object { Split-Path -Parent $_ } }
++        $root   = Split-Path -Parent (Split-Path -Parent $scriptDir)   # <root>
++        $engine = Join-Path $root 'zapret-engine'
++    }
+ 
+     if (-not (Test-Path -LiteralPath $engine)) { exit 0 }
+ 
+diff --git a/src/menu.bat b/src/menu.bat
+index cb309bd..215572d 100644
+--- a/src/menu.bat
++++ b/src/menu.bat
+@@ -93,7 +93,11 @@ echo.
+ echo  Выбери стратегию по умолчанию (она станет автоматической):
+ echo.
+ set /a N=0
+-for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\profiles.ps1`) do (
++rem  pass the engine folder explicitly: if menu.bat is launched from a copy
++rem  of the repo (or profiles.ps1 was moved), walking up from the script's
++rem  own location would point at the wrong zapret-engine\ and the list
++rem  would come back empty even though the .bat files exist.
++for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\profiles.ps1 -EngineDir "%ZEYE_ENGINE%"`) do (
+     set /a N+=1
+     set "PROFILE_!N!=%%F"
+     set "ARGS_!N!=%%G"
+-- 
+2.39.5
+

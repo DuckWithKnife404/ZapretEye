@@ -1,0 +1,64 @@
+From e382b66b8e6ccd4b7bd3096f93374d20cb4b4363 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:15:08 +0000
+Subject: [PATCH 4/8] fix(lib): locate winws.exe in bin\ subfolder (newer
+ Flowseal releases ship it there)
+
+---
+ src/lib/paths.bat   |  7 +++++--
+ src/lib/restart.bat | 10 +++++++---
+ 2 files changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/src/lib/paths.bat b/src/lib/paths.bat
+index cfdd187..a5a5ba9 100644
+--- a/src/lib/paths.bat
++++ b/src/lib/paths.bat
+@@ -1,4 +1,4 @@
+-@echo off
++﻿@echo off
+ rem ============================================================
+ rem  ZapretEye (zeye) - shared paths
+ rem  Include with:  cd /d "%~dp0" ^&^& call paths.bat
+@@ -12,7 +12,10 @@ set "ZEYE_SRC=%ZEYE_ROOT%\src"
+ set "ZEYE_ENGINE=%ZEYE_ROOT%\zapret-engine"
+ set "ZEYE_CONFIG=%ZEYE_ROOT%\config.json"
+ set "ZEYE_ICON=%ZEYE_ROOT%\assets\icon.ico"
+-set "ZEYE_WINWS=%ZEYE_ENGINE%\winws.exe"
++rem winws.exe lives in the engine root in older releases and in bin\ in
++rem newer ones (1.10.x ships bin\winws.exe) - prefer whichever exists
++set "ZEYE_WINWS=%ZEYE_ENGINE%\bin\winws.exe"
++if not exist "%ZEYE_WINWS%" set "ZEYE_WINWS=%ZEYE_ENGINE%\winws.exe"
+ set "ZEYE_USERLIST=%ZEYE_ENGINE%\lists\list-general-user.txt"
+ set "ZEYE_VERSIONFILE=%ZEYE_ENGINE%\version.txt"
+ 
+diff --git a/src/lib/restart.bat b/src/lib/restart.bat
+index 3f75142..2498584 100644
+--- a/src/lib/restart.bat
++++ b/src/lib/restart.bat
+@@ -1,4 +1,4 @@
+-@echo off
++﻿@echo off
+ rem ============================================================
+ rem  ZapretEye (zeye) - silent restart of winws.exe
+ rem  Reads the saved strategy from config.json and relaunches
+@@ -20,11 +20,15 @@ if exist "%ZEYE_CONFIG%" (
+ )
+ if not "%STRAT%"=="" set "STRAT=%STRAT: =%"
+ 
++rem ---- locate winws.exe (engine root or bin\ subfolder) ----
++set "WINWS=%ZEYE_ENGINE%\bin\winws.exe"
++if not exist "%WINWS%" set "WINWS=%ZEYE_ENGINE%\winws.exe"
++
+ rem ---- stop current instance ----
+ taskkill /F /IM winws.exe >nul 2>&1
+ 
+-if not exist "%ZEYE_WINWS%" (
+-    echo [zeye] Движок не найден: "%ZEYE_WINWS%"
++if not exist "%WINWS%" (
++    echo [zeye] Движок не найден: "%WINWS%"
+     echo [zeye] Сначала выполни обновление движка.
+     exit /b 1
+ )
+-- 
+2.39.5
+
