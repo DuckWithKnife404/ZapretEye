@@ -20,6 +20,16 @@ function Invoke-Curl([string[]]$CurlArgs) {
     if ($LASTEXITCODE -ne 0) { throw "curl.exe failed (exit $LASTEXITCODE)" }
 }
 
+function Stop-EngineProcesses {
+    # Safely stop winws.exe if it is running. Uses Get-Process/Stop-Process
+    # instead of taskkill.exe: taskkill writes "ERROR: The process ... not
+    # found." to stderr when the process isn't running, and that stderr output
+    # becomes a terminating error under $ErrorActionPreference = 'Stop'.
+    Get-Process -Name 'winws' -ErrorAction SilentlyContinue | ForEach-Object {
+        try { Stop-Process -Id $_.Id -Force -ErrorAction Stop } catch {}
+    }
+}
+
 function Copy-TreeOver([string]$From, [string]$To) {
     # Recursively copy $From over $To, skipping protected files
     if (-not (Test-Path $To)) { New-Item -ItemType Directory -Path $To | Out-Null }
@@ -76,8 +86,11 @@ try {
     }
     Write-Host ('[zeye] Локальная версия: ' + $(if ($local) { $local } else { 'нет' }) + ' -> новая: ' + $latest)
 
-    # stop the engine while replacing binaries
-    & taskkill.exe /F /IM winws.exe >$null 2>&1
+    # stop the engine while replacing binaries.
+    # NOTE: do NOT use taskkill here - when winws.exe is not running it prints
+    # "ERROR: The process "winws.exe" not found." to stderr, which under
+    # $ErrorActionPreference='Stop' PowerShell turns into a terminating NativeCommandError.
+    Stop-EngineProcesses
 
     # ---- download silently to %TEMP% ---------------------------
     $zip     = Join-Path $env:TEMP ('zapret-' + $latest + '.zip')
