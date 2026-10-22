@@ -2,10 +2,14 @@
 rem ============================================================
 rem  ZapretEye (zeye) - CLI wrapper
 rem  Commands: add | remove | list | help | start | stop | restart
-rem  Lives in C:\zeye-tools\ after install-path.bat copies it there.
+rem  Lives in C:\zeye-tools\ after install-path.ps1 copies it there.
 rem  The real engine path is read from C:\zeye-tools\config-path.txt,
-rem  written by install-path.bat (this avoids broken %~dp0.. copies).
+rem  written by install-path.ps1 (this avoids broken %~dp0.. copies).
 rem ============================================================
+rem NOTE: keep the file UTF-8 and switch the console to 65001 before any
+rem Cyrillic output, otherwise cmd.exe decodes the source as cp866 and the
+rem user sees mojibake.
+chcp 65001 >nul
 setlocal EnableExtensions DisableDelayedExpansion
 
 rem ---- locate the ZapretEye root ----
@@ -93,7 +97,8 @@ exit /b %errorlevel%
 
 :stop
 taskkill /F /IM winws.exe >nul 2>&1
-if %errorlevel%==0 (echo [zeye] winws.exe остановлен.) else (echo [zeye] winws.exe не запущен.)
+set "RC=%errorlevel%"
+if "%RC%"=="0" (echo [zeye] winws.exe остановлен.) else (echo [zeye] winws.exe не запущен.)
 exit /b 0
 
 :restart
@@ -118,17 +123,30 @@ exit /b 0
 :sanitize
 rem Reject anything that is not a plain hostname/domain.
 set "D=%~1"
-for /f "delims=[a-zA-Z0-9._-] tokens=1,*" %%c in ("%D%") do set "CLEAN=%%c"
-if not defined CLEAN set "CLEAN="
-if not "%CLEAN%"=="%D%" (
+if "%D%"=="" (
+    echo [zeye] Пустой домен. Пример: zeye add "domain.com"
+    exit /b 2
+)
+set "CLEAN=%D%"
+rem strip every allowed char; if anything is left -> illegal symbol present.
+rem The list must be case-sensitive: %VAR:old=new% substitution is CI in cmd,
+rem so both cases are listed explicitly (a-z and A-Z).
+for %%S in (a b c d e f g h i j k l m n o p q r s t u v w x y z ^
+            A B C D E F G H I J K L M N O P Q R S T U V W X Y Z ^
+            0 1 2 3 4 5 6 7 8 9 . _ -) do call set "CLEAN=%%CLEAN:%%S=%%"
+if not "%CLEAN%"=="" (
     echo [zeye] Недопустимый символ в домене: %D%
     exit /b 2
 )
-if "%D%"=="" exit /b 2
+if /i "%D%"=="con" (
+    echo [zeye] Зарезервированное имя Windows нельзя использовать как домен: %D%
+    exit /b 2
+)
 if "%D:~0,1%"=="." (
     echo [zeye] Домен не может начинаться с точки: %D%
     exit /b 2
 )
+rem trailing dot is allowed on purpose: "example.com." is a valid FQDN (root hint)
 exit /b 0
 
 :usage

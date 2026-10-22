@@ -5,6 +5,7 @@ rem  Reads the saved strategy from config.json and relaunches
 rem  the engine hidden (no console window).
 rem  Usage: call "%~dp0restart.bat" [--no-wait]
 rem ============================================================
+chcp 65001 >nul
 setlocal EnableExtensions
 
 rem paths.bat resolves ZEYE_ROOT from the current directory, so run it in lib\

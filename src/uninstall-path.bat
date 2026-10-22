@@ -3,6 +3,7 @@ rem ============================================================
 rem  ZapretEye (zeye) - rollback of install-path.ps1
 rem  Removes C:\zeye-tools from the user PATH and deletes it.
 rem ============================================================
+chcp 65001 >nul
 setlocal EnableExtensions
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^

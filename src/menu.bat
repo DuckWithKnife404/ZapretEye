@@ -1,14 +1,18 @@
 @echo off
 rem ============================================================
 rem  ZapretEye (zeye) - CMD panel (глазик + меню)
-rem  Header is pure ASCII so it renders in any console codepage.
+rem  The eye/logo block is pure ASCII; the rest needs UTF-8 + chcp 65001.
 rem  First run  -> download engine (update.ps1) + choose strategy
 rem  After start-> tray icon, 10s wait, then the window closes
 rem  and winws.exe keeps working hidden.
 rem ============================================================
 title ZapretEye (zeye)
-rem NOTE: keep the console codepage default (866) so chcp 65001
-rem does not break Cyrillic output of child scripts (zeye.bat etc.).
+rem NOTE: the .bat sources are saved as UTF-8. cmd.exe reads them in the
+rem active console codepage, so we switch to 65001 *before* any Cyrillic
+rem output happens (otherwise the menu shows cp866 mojibake). Works with
+rem the default raster font and with Consolas/Lucida Console.
+chcp 65001 >nul
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0" && call "lib\paths.bat"
 
 set "PS=powershell -NoProfile -ExecutionPolicy Bypass"
@@ -31,13 +35,14 @@ rem read the saved strategy via config.ps1 (JSON-safe: findstr+delims== would
 rem truncate values and cannot reassemble multi-line pretty-printed JSON)
 set "DSTRAT="
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key default_strategy`) do set "DSTRAT=%%A"
-tasklist /FI "IMAGENAME eq winws.exe" 2>nul | find /i "winws.exe" >nul && (set "RUNSTATE=активен") || (set "RUNSTATE=остановлен")
-if "%DSTRAT%"=="" (set "STATUS=Стратегия не выбрана") else (set "STATUS=Запущена стратегия: %DSTRAT% ^(авто^)  [winws.exe: %RUNSTATE%]")
-echo   %STATUS%
+set "RUNSTATE=остановлен"
+tasklist /FI "IMAGENAME eq winws.exe" 2>nul | find /i "winws.exe" >nul && set "RUNSTATE=активен"
+if "!DSTRAT!"=="" (set "STATUS=Стратегия не выбрана") else (set "STATUS=Запущена стратегия: !DSTRAT! (авто)  [winws.exe: !RUNSTATE!]")
+echo   !STATUS!
 set "LVER="
 if exist "%ZEYE_VERSIONFILE%" set /p "LVER="<"%ZEYE_VERSIONFILE%"
-if "%LVER%"=="" (set "VER=Движок: не установлен") else (set "VER=Движок: %LVER%")
-echo   %VER%
+if "!LVER!"=="" (set "VER=Движок: не установлен") else (set "VER=Движок: !LVER!")
+echo   !VER!
 echo  =========================================
 echo.
 
@@ -49,7 +54,7 @@ echo    4. Настройки
 echo    5. Выход
 echo.
 choice /c 12345 /n /m "  Выбор: "
-if errorlevel 5 exit /b 0
+if errorlevel 5 ( endlocal & exit /b 0 )
 if errorlevel 4 goto :settings
 if errorlevel 3 goto :adddomain
 if errorlevel 2 goto :check
@@ -68,10 +73,12 @@ if not exist "%ZEYE_WINWS%" (
 )
 
 rem ---- first run: pick a strategy (it becomes the automatic one)
-if not "%DSTRAT%"=="" goto :launch
+if not "!DSTRAT!"=="" goto :launch
 goto :pickstrategy
 
 :pickstrategy
+set "DSTRAT="
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key default_strategy`) do set "DSTRAT=%%A"
 echo.
 echo  Выбери стратегию по умолчанию (она станет автоматической):
 echo.
@@ -80,21 +87,22 @@ for %%F in ("%ZEYE_ENGINE%\*.bat") do (
     rem skip helper scripts that are not strategies (same rule as check.ps1)
     if /i not "%%~nxF"=="service.bat" if /i not "%%~nxF"=="uninstall_service.bat" if /i not "%%~nxF"=="update.bat" if /i not "%%~nxF"=="check.bat" (
         set /a N+=1
-        set "P!N!=%%~nxF"
+        set "PROFILE_!N!=%%~nxF"
         echo    !N!. %%~nxF
     )
 )
 if %N%==0 ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
 echo.
+set "SEL="
 set /p "SEL=  Номер: "
-set "PROFILE="
-rem expand P1..PN after SEL is known
-call set "PROFILE=%%P%SEL%%%"
+rem expand PROFILE_1..PROFILE_N now that SEL is known (delayed expansion)
+set "PROFILE=!PROFILE_%SEL%!"
 if not defined PROFILE ( echo  [zeye] Неверный номер. & pause & goto :header )
 if not exist "%ZEYE_ENGINE%\%PROFILE%" ( echo  [zeye] Файл не найден. & pause & goto :header )
 
 set "DSTRAT=%PROFILE:.bat=%"
 %PS% -File lib\config.ps1 set -Key default_strategy -Value "%DSTRAT%"
+%PS% -File lib\config.ps1 set -Key last_profile -Value "%PROFILE%"
 
 rem ---- first run: register the "zeye" command in PATH ----------
 echo  [zeye] Регистрирую команду zeye в PATH...
@@ -129,9 +137,10 @@ goto :header
 
 :adddomain
 echo.
+set "DOM="
 set /p "DOM=  Домен (например, domain.com): "
-if "%DOM%"=="" goto :header
-call "%ZEYE_SRC%\zeye.bat" add "%DOM%"
+if "!DOM!"=="" goto :header
+call "%ZEYE_SRC%\zeye.bat" add "!DOM!"
 echo.
 pause
 goto :header
@@ -145,7 +154,7 @@ for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key check_timeout`) do set "CTO=%%A"
 echo    check_url        = %CURL_%
 echo    check_timeout    = %CTO%
-echo    default_strategy = %DSTRAT%
+echo    default_strategy = !DSTRAT!
 echo.
 echo    s. Сменить стратегию по умолчанию
 echo    u. Обновить движок сейчас
@@ -169,7 +178,7 @@ if errorlevel 2 (
     pause & goto :header
 )
 if errorlevel 1 (
-    set "DSTRAT="
+    rem re-read config.json inside :pickstrategy, so the header stays correct
     goto :pickstrategy
 )
 
