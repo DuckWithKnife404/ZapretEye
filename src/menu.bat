@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - CMD panel (глазик + меню)
 rem  Header is pure ASCII so it renders in any console codepage.
@@ -27,10 +27,10 @@ echo              Z A P R E T   E Y E
 echo         Flowseal and DuckWithKnife404
 echo.
 echo  =========================================
-rem read the saved strategy via findstr (fast, no PowerShell roundtrip)
+rem read the saved strategy via config.ps1 (JSON-safe: findstr+delims== would
+rem truncate values and cannot reassemble multi-line pretty-printed JSON)
 set "DSTRAT="
-set "CFGF=%ZEYE_CONFIG:\="=%"
-for /f "tokens=2 delims==" %%A in ('findstr /c:"default_strategy" "%CFGF%"') do set "DSTRAT=%%~A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key default_strategy`) do set "DSTRAT=%%A"
 tasklist /FI "IMAGENAME eq winws.exe" 2>nul | find /i "winws.exe" >nul && (set "RUNSTATE=активен") || (set "RUNSTATE=остановлен")
 if "%DSTRAT%"=="" (set "STATUS=Стратегия не выбрана") else (set "STATUS=Запущена стратегия: %DSTRAT% ^(авто^)  [winws.exe: %RUNSTATE%]")
 echo   %STATUS%
@@ -77,9 +77,12 @@ echo  Выбери стратегию по умолчанию (она стане
 echo.
 set /a N=0
 for %%F in ("%ZEYE_ENGINE%\*.bat") do (
-    set /a N+=1
-    set "P!N!=%%~nxF"
-    echo    !N!. %%~nxF
+    rem skip helper scripts that are not strategies (same rule as check.ps1)
+    if /i not "%%~nxF"=="service.bat" if /i not "%%~nxF"=="uninstall_service.bat" if /i not "%%~nxF"=="update.bat" if /i not "%%~nxF"=="check.bat" (
+        set /a N+=1
+        set "P!N!=%%~nxF"
+        echo    !N!. %%~nxF
+    )
 )
 if %N%==0 ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
 echo.
@@ -92,7 +95,6 @@ if not exist "%ZEYE_ENGINE%\%PROFILE%" ( echo  [zeye] Файл не найден
 
 set "DSTRAT=%PROFILE:.bat=%"
 %PS% -File lib\config.ps1 set -Key default_strategy -Value "%DSTRAT%"
-%PS% -File lib\config.ps1 set -Key last_profile   -Value "%PROFILE:.bat=%"
 
 rem ---- first run: register the "zeye" command in PATH ----------
 echo  [zeye] Регистрирую команду zeye в PATH...
@@ -137,9 +139,12 @@ goto :header
 :settings
 echo.
 echo  Текущие настройки:
-set "CFGF=%ZEYE_CONFIG:\="=%"
-for /f "tokens=2 delims==" %%A in ('findstr /c:"check_url" "%CFGF%"') do echo    check_url      = %%~A
-for /f "tokens=2 delims==" %%A in ('findstr /c:"check_timeout" "%CFGF%"') do echo    check_timeout  = %%~A
+set "CURL_="
+set "CTO="
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key check_url`) do set "CURL_=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File lib\config.ps1 get -Key check_timeout`) do set "CTO=%%A"
+echo    check_url        = %CURL_%
+echo    check_timeout    = %CTO%
 echo    default_strategy = %DSTRAT%
 echo.
 echo    s. Сменить стратегию по умолчанию

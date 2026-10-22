@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - silent restart of winws.exe
 rem  Reads the saved strategy from config.json and relaunches

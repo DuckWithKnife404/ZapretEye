@@ -15,7 +15,11 @@ $ErrorActionPreference = 'Stop'
 try {
     if ([string]::IsNullOrEmpty($Path)) {
         # default: repo root config.json (this file lives in <root>\src\)
-        $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+        # Resolve the script dir robustly: $MyInvocation.MyCommand.Path is
+        # empty when the file is dot-sourced, so fall back to the call stack.
+        $scriptPath = $MyInvocation.MyCommand.Path
+        if (-not $scriptPath) { $scriptPath = (Get-PSCallStack)[0].ScriptName }
+        $root = Split-Path -Parent (Split-Path -Parent $scriptPath)
         $Path = Join-Path $root 'config.json'
     }
 

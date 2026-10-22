@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - CLI wrapper
 rem  Commands: add | remove | list | help | start | stop | restart
