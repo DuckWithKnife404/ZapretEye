@@ -89,7 +89,11 @@ try {
     # skip the download and menu.bat would fail with
     # ".bat стратегии не найдены в движке". So only trust version.txt when
     # the binaries are really on disk; otherwise force a redownload.
-    $engineOk = (Test-Path (Join-Path $engine 'winws.exe')) -and
+    # winws.exe lives in the engine root in some releases and in bin\ in
+    # newer ones (e.g. 1.10.x ships bin\winws.exe), so accept either place.
+    $winwsOk = (Test-Path (Join-Path $engine 'winws.exe')) -or
+               (Test-Path (Join-Path $engine 'bin\winws.exe'))
+    $engineOk = $winwsOk -and
                 (@(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File -ErrorAction SilentlyContinue).Count -gt 0)
 
     if (($local -eq $latest) -and (-not $Force) -and $engineOk) {
