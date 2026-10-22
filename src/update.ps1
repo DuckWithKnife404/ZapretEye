@@ -80,11 +80,25 @@ try {
     $local = ''
     if (Test-Path $verFile) { $local = ((Get-Content $verFile -First 1) + '').Trim() }
 
-    if (($local -eq $latest) -and (-not $Force)) {
+    Write-Host ('[zeye] Локальная версия: ' + $(if ($local) { $local } else { 'нет' }) + ' -> новая: ' + $latest)
+
+    # ---- is the installed engine actually usable? --------------
+    # If a previous run was interrupted mid-copy (or files were deleted by
+    # hand), version.txt can claim the engine is current while winws.exe and
+    # the strategy .bat files are gone. Then an early "Уже актуально" would
+    # skip the download and menu.bat would fail with
+    # ".bat стратегии не найдены в движке". So only trust version.txt when
+    # the binaries are really on disk; otherwise force a redownload.
+    $engineOk = (Test-Path (Join-Path $engine 'winws.exe')) -and
+                (@(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File -ErrorAction SilentlyContinue).Count -gt 0)
+
+    if (($local -eq $latest) -and (-not $Force) -and $engineOk) {
         Write-Host "[zeye] Уже актуально: $latest"
         exit 0
     }
-    Write-Host ('[zeye] Локальная версия: ' + $(if ($local) { $local } else { 'нет' }) + ' -> новая: ' + $latest)
+    if (($local -eq $latest) -and (-not $Force) -and -not $engineOk) {
+        Write-Host '[zeye] Папка движка повреждена или пуста — скачиваю заново...'
+    }
 
     # stop the engine while replacing binaries.
     # NOTE: do NOT use taskkill here - when winws.exe is not running it prints
