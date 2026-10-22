@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  ZapretEye (zeye) - strategy checker (HTTPS only, TCP 443)
 #  For every strategy .bat in zapret-engine\:
 #      start it hidden -> curl the check URL with a timeout

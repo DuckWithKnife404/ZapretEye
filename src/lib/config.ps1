@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  ZapretEye (zeye) - config.json helpers
 #  Called from batch as: powershell -File config.ps1 <get|set> ...
 #  config.json is edited programmatically only (see design doc).

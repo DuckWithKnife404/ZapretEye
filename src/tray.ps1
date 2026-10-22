@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  ZapretEye (zeye) - tray icon (PowerShell + NotifyIcon)
 #  Icon: assets\icon.ico. Context menu:
 #    Открыть панель   -> menu.bat

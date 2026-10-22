@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  ZapretEye (zeye) - engine auto-update (silent, no browser)
 #  Downloads Flowseal/zapret-discord-youtube releases via the
 #  GitHub API with curl.exe and unpacks them into zapret-engine\.
