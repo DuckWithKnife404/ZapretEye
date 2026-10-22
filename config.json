@@ -1,0 +1,7 @@
+{
+  "default_strategy": "",
+  "check_url": "https://www.youtube.com/",
+  "check_timeout": 5,
+  "tray_icon": "assets\\icon.ico",
+  "engine_dir": "zapret-engine"
+}
