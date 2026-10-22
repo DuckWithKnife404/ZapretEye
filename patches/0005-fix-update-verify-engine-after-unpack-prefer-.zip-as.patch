@@ -1,0 +1,205 @@
+From 5790c8c72a43222c644039217e08cc3e16539aa7 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:17:48 +0000
+Subject: [PATCH 5/8] fix(update): verify engine after unpack, prefer .zip
+ asset, portable Copy-TreeOver
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- version.txt is now written only after winws.exe + at least one strategy
+  .bat are confirmed on disk; a broken/partial install can no longer be
+  reported as "Уже актуально" while menu.bat shows ".bat стратегии не
+  найдены в движке" and the header still says "Движок: не установлен".
+- release asset selection matches by extension (.zip preferred, .rar/.7z
+  fallback via 7-Zip/WinRAR) instead of a loose regex.
+- Copy-TreeOver: replace PS3-only '-in' with @().Contains() and use
+  -LiteralPath everywhere so paths with spaces/brackets (all Flowseal
+  strategy names contain spaces and parentheses) copy reliably.
+- Test-EngineInstall() shared helper for pre-download and post-copy checks.
+---
+ src/update.ps1 | 119 +++++++++++++++++++++++++++++++++++++++----------
+ 1 file changed, 96 insertions(+), 23 deletions(-)
+
+diff --git a/src/update.ps1 b/src/update.ps1
+index d54b58d..7805cf2 100644
+--- a/src/update.ps1
++++ b/src/update.ps1
+@@ -31,20 +31,38 @@ function Stop-EngineProcesses {
+ }
+ 
+ function Copy-TreeOver([string]$From, [string]$To) {
+-    # Recursively copy $From over $To, skipping protected files
+-    if (-not (Test-Path $To)) { New-Item -ItemType Directory -Path $To | Out-Null }
++    # Recursively copy $From over $To, skipping protected files.
++    # NOTE: $_.Name -in $Array is PowerShell 3+ syntax; Windows PowerShell 5.1
++    # has it, but older hosts (or a PS 2 engine forced by the environment)
++    # silently throw here, which used to abort the copy halfway and leave an
++    # engine folder with version.txt but no *.bat strategies. Use the portable
++    # .Contains() call instead.
++    $exclude = @($script:ExcludeFiles)
++    if (-not (Test-Path -LiteralPath $To)) { New-Item -ItemType Directory -Path $To | Out-Null }
+     Get-ChildItem -LiteralPath $From -Force | ForEach-Object {
+         $dst = Join-Path $To $_.Name
+         if ($_.PSIsContainer) {
+             Copy-TreeOver $_.FullName $dst
+         } else {
+-            if ($_.Name -in $script:ExcludeFiles) { return }
+-            if ($_.Name -like "$script:KeepBatPrefix*" -and (Test-Path $dst)) { return }
++            if ($exclude.Contains($_.Name)) { return }
++            if ($_.Name -like "$script:KeepBatPrefix*" -and (Test-Path -LiteralPath $dst)) { return }
+             Copy-Item -LiteralPath $_.FullName -Destination $dst -Force
+         }
+     }
+ }
+ 
++function Test-EngineInstall([string]$EngineDir) {
++    # True only when the engine folder really contains winws.exe (root or bin\)
++    # AND at least one strategy .bat. Shared by the "already up to date" check
++    # and the post-copy verification.
++    if ([string]::IsNullOrEmpty($EngineDir) -or -not (Test-Path -LiteralPath $EngineDir)) { return $false }
++    $winws = (Test-Path -LiteralPath (Join-Path $EngineDir 'bin\winws.exe')) -or
++             (Test-Path -LiteralPath (Join-Path $EngineDir 'winws.exe'))
++    if (-not $winws) { return $false }
++    $bats = @(Get-ChildItem -LiteralPath $EngineDir -Filter '*.bat' -File -ErrorAction SilentlyContinue)
++    return ($bats.Count -gt 0)
++}
++
+ try {
+     # ---- paths -------------------------------------------------
+     # Resolve the script dir robustly ($MyInvocation.MyCommand.Path is
+@@ -70,11 +88,29 @@ try {
+     if (-not $release.tag_name) { throw 'GitHub API: не удалось получить информацию о релизе.' }
+ 
+     $latest = $release.tag_name.TrimStart('v')
+-    $zipUrl = $null
+-    foreach ($a in $release.assets) {
+-        if ($a.name -match '\.zip$') { $zipUrl = $a.browser_download_url; break }
++
++    # ---- pick the archive asset --------------------------------
++    # Flowseal publishes .zip / .rar / .tar.gz for the SAME build. Only the
++    # .zip can be unpacked with Expand-Archive, so prefer it explicitly by
++    # extension (a loose '.zip' regex once matched nothing when the release
++    # shipped only .rar + .tar.gz -> "В релизе не найден .zip архив").
++    $assets   = @($release.assets)
++    $zipAsset = $assets | Where-Object { $_.name -and $_.name.ToLower().EndsWith('.zip') } | Select-Object -First 1
++    $altAsset = $assets | Where-Object { $_.name -and ($_.name.ToLower().EndsWith('.rar') -or $_.name.ToLower().EndsWith('.7z')) } | Select-Object -First 1
++
++    if ($zipAsset) {
++        $script:ArchiveKind = 'zip'
++        $dlUrl = $zipAsset.browser_download_url
++        $arch  = Join-Path $env:TEMP ('zapret-' + $latest + '.zip')
++    } elseif ($altAsset) {
++        # no zip available - fall back to WinRAR/7-Zip if the user has one
++        $script:ArchiveKind = 'rar'
++        $ext = [IO.Path]::GetExtension($altAsset.name)
++        $dlUrl = $altAsset.browser_download_url
++        $arch  = Join-Path $env:TEMP ('zapret-' + $latest + $ext)
++    } else {
++        throw 'В релизе нет ни .zip, ни .rar архива.'
+     }
+-    if (-not $zipUrl) { throw 'В релизе не найден .zip архив.' }
+ 
+     # ---- compare with local version ----------------------------
+     $local = ''
+@@ -89,12 +125,7 @@ try {
+     # skip the download and menu.bat would fail with
+     # ".bat стратегии не найдены в движке". So only trust version.txt when
+     # the binaries are really on disk; otherwise force a redownload.
+-    # winws.exe lives in the engine root in some releases and in bin\ in
+-    # newer ones (e.g. 1.10.x ships bin\winws.exe), so accept either place.
+-    $winwsOk = (Test-Path (Join-Path $engine 'winws.exe')) -or
+-               (Test-Path (Join-Path $engine 'bin\winws.exe'))
+-    $engineOk = $winwsOk -and
+-                (@(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File -ErrorAction SilentlyContinue).Count -gt 0)
++    $engineOk = Test-EngineInstall $engine
+ 
+     if (($local -eq $latest) -and (-not $Force) -and $engineOk) {
+         Write-Host "[zeye] Уже актуально: $latest"
+@@ -111,24 +142,66 @@ try {
+     Stop-EngineProcesses
+ 
+     # ---- download silently to %TEMP% ---------------------------
+-    $zip     = Join-Path $env:TEMP ('zapret-' + $latest + '.zip')
+     $extract = Join-Path $env:TEMP ('zapret-extract-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+     # --fail: without it curl exits 0 on HTTP errors (404/403 rate limit) and
+-    # Expand-Archive then chokes on an HTML error page instead of a zip.
+-    Invoke-Curl @('-L', '-sS', '--fail', '--max-time', '600', '-o', $zip, $zipUrl) | Out-Null
+-    if ((Get-Item $zip).Length -lt 10240) { throw 'Скачанный файл слишком мал — похоже, релиз не доступен.' }
++    # the unpacker then chokes on an HTML error page instead of an archive.
++    Invoke-Curl @('-L', '-sS', '--fail', '--max-time', '600', '-o', $arch, $dlUrl) | Out-Null
++    if ((Get-Item $arch).Length -lt 10240) { throw 'Скачанный файл слишком мал — похоже, релиз не доступен.' }
+ 
+     if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
+     New-Item -ItemType Directory -Path $extract | Out-Null
+-    Expand-Archive -Path $zip -DestinationPath $extract -Force
+ 
+-    # The archive contains a single top folder like "zapret-discord-youtube-1.10.2"
+-    $inner = Get-ChildItem -Directory $extract | Select-Object -First 1
+-    if (-not $inner) { $inner = Get-Item $extract }
++    if ($script:ArchiveKind -eq 'zip') {
++        Expand-Archive -Path $arch -DestinationPath $extract -Force
++    } else {
++        # .rar/.7z fallback: only possible with an external unpacker
++        $unpack = $null
++        foreach ($cand in @(
++            "$env:ProgramFiles\7-Zip\7z.exe",
++            "${env:ProgramFiles(x86)}\7-Zip\7z.exe",
++            "$env:ProgramFiles\WinRAR\Rar.exe",
++            "${env:ProgramFiles(x86)}\WinRAR\Rar.exe",
++            "$env:LOCALAPPDATA\Programs\7-Zip\7z.exe"
++        )) {
++            if ($cand -and (Test-Path $cand)) { $unpack = $cand; break }
++        }
++        if (-not $unpack) {
++            throw ('В релизе нет .zip (скачан ' + [IO.Path]::GetFileName($arch) +
++                   '), а 7-Zip/WinRAR не найдены. Установи 7-Zip или скачай движок вручную.')
++        }
++        if ($unpack -match '7z\.exe$') {
++            & $unpack 'x' "-o$extract" $arch '-y' | Out-Null
++        } else {
++            & $unpack 'x' '-y' $arch ($extract + '\') | Out-Null
++        }
++        if ($LASTEXITCODE -ne 0) { throw "Распаковка архива не удалась (exit $LASTEXITCODE)." }
++    }
++
++    # The archive contains a single top folder like "zapret-discord-youtube-1.10.2".
++    # Some packers/older releases extract files straight into $extract, so only
++    # descend when there is exactly ONE top-level directory and no loose files -
++    # otherwise we would copy an empty dir and end up with an engine that has
++    # version.txt but no *.bat strategies ("`.bat стратегии не найдены в движке`").
++    $inner = Get-Item $extract
++    $topDirs  = @(Get-ChildItem -LiteralPath $extract -Directory -ErrorAction SilentlyContinue)
++    $topFiles = @(Get-ChildItem -LiteralPath $extract -File -ErrorAction SilentlyContinue)
++    if ($topDirs.Count -eq 1 -and $topFiles.Count -eq 0) { $inner = $topDirs[0] }
+ 
+     # ---- copy over zapret-engine\ with exceptions --------------
+     Copy-TreeOver $inner.FullName $engine
+ 
++    # ---- verify the install BEFORE writing version.txt ----------
++    # If winws.exe or the strategy .bat files did not land in zapret-engine\,
++    # claiming the version would make the next run print "Уже актуально" and
++    # skip the redownload forever (that is exactly how "Движок: не установлен"
++    # + ".bat стратегии не найдены в движке" appeared together).
++    $batCount = @(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File -ErrorAction SilentlyContinue).Count
++    if (-not (Test-EngineInstall $engine)) {
++        throw ('Распаковано, но в zapret-engine\ нет winws.exe или .bat стратегий ' +
++               '(файлов .bat: ' + $batCount + '). Проверь, не блокирует ли антивирус/SmartScreen копирование.')
++    }
++    Write-Host ('[zeye] Файлов стратегий: ' + $batCount + ', winws.exe: ок')
++
+     # make sure the user list exists (add/remove writes into it)
+     $userList = Join-Path $engine 'lists\list-general-user.txt'
+     if (-not (Test-Path $userList)) {
+@@ -138,7 +211,7 @@ try {
+ 
+     # ---- record the installed version --------------------------
+     Set-Content -Path $verFile -Value $latest -Encoding ASCII
+-    Remove-Item $zip -Force -ErrorAction SilentlyContinue
++    Remove-Item $arch -Force -ErrorAction SilentlyContinue
+     Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+ 
+     Write-Host "[zeye] Движок обновлён до $latest"
+-- 
+2.39.5
+

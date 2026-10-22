@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - silent restart of winws.exe
 rem  Reads the saved strategy from config.json and relaunches
@@ -20,11 +20,15 @@ if exist "%ZEYE_CONFIG%" (
 )
 if not "%STRAT%"=="" set "STRAT=%STRAT: =%"
 
+rem ---- locate winws.exe (engine root or bin\ subfolder) ----
+set "WINWS=%ZEYE_ENGINE%\bin\winws.exe"
+if not exist "%WINWS%" set "WINWS=%ZEYE_ENGINE%\winws.exe"
+
 rem ---- stop current instance ----
 taskkill /F /IM winws.exe >nul 2>&1
 
-if not exist "%ZEYE_WINWS%" (
-    echo [zeye] Движок не найден: "%ZEYE_WINWS%"
+if not exist "%WINWS%" (
+    echo [zeye] Движок не найден: "%WINWS%"
     echo [zeye] Сначала выполни обновление движка.
     exit /b 1
 )

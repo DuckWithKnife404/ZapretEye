@@ -1,0 +1,30 @@
+From 81cc9aca5eb174998513b3a1f295ce9994ad7ce8 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:14:43 +0000
+Subject: [PATCH 3/8] fix(update): accept winws.exe in engine root or bin/
+ subfolder when validating install
+
+---
+ src/update.ps1 | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/update.ps1 b/src/update.ps1
+index a625be6..d54b58d 100644
+--- a/src/update.ps1
++++ b/src/update.ps1
+@@ -89,7 +89,11 @@ try {
+     # skip the download and menu.bat would fail with
+     # ".bat стратегии не найдены в движке". So only trust version.txt when
+     # the binaries are really on disk; otherwise force a redownload.
+-    $engineOk = (Test-Path (Join-Path $engine 'winws.exe')) -and
++    # winws.exe lives in the engine root in some releases and in bin\ in
++    # newer ones (e.g. 1.10.x ships bin\winws.exe), so accept either place.
++    $winwsOk = (Test-Path (Join-Path $engine 'winws.exe')) -or
++               (Test-Path (Join-Path $engine 'bin\winws.exe'))
++    $engineOk = $winwsOk -and
+                 (@(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File -ErrorAction SilentlyContinue).Count -gt 0)
+ 
+     if (($local -eq $latest) -and (-not $Force) -and $engineOk) {
+-- 
+2.39.5
+

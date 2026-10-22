@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 rem ============================================================
 rem  ZapretEye (zeye) - shared paths
 rem  Include with:  cd /d "%~dp0" ^&^& call paths.bat
@@ -12,7 +12,10 @@ set "ZEYE_SRC=%ZEYE_ROOT%\src"
 set "ZEYE_ENGINE=%ZEYE_ROOT%\zapret-engine"
 set "ZEYE_CONFIG=%ZEYE_ROOT%\config.json"
 set "ZEYE_ICON=%ZEYE_ROOT%\assets\icon.ico"
-set "ZEYE_WINWS=%ZEYE_ENGINE%\winws.exe"
+rem winws.exe lives in the engine root in older releases and in bin\ in
+rem newer ones (1.10.x ships bin\winws.exe) - prefer whichever exists
+set "ZEYE_WINWS=%ZEYE_ENGINE%\bin\winws.exe"
+if not exist "%ZEYE_WINWS%" set "ZEYE_WINWS=%ZEYE_ENGINE%\winws.exe"
 set "ZEYE_USERLIST=%ZEYE_ENGINE%\lists\list-general-user.txt"
 set "ZEYE_VERSIONFILE=%ZEYE_ENGINE%\version.txt"
 

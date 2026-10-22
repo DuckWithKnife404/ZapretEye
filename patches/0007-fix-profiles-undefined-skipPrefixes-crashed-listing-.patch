@@ -1,0 +1,50 @@
+From b493408a45adcf4ab4fddc1ea0801ee1ae026e07 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:24:37 +0000
+Subject: [PATCH 7/8] fix(profiles): undefined $skipPrefixes crashed listing
+ (empty menu); fix N check in menu.bat picker
+
+---
+ src/lib/profiles.ps1 | 11 +++++++----
+ src/menu.bat         |  2 +-
+ 2 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/src/lib/profiles.ps1 b/src/lib/profiles.ps1
+index 29165cf..dd5f748 100644
+--- a/src/lib/profiles.ps1
++++ b/src/lib/profiles.ps1
+@@ -21,11 +21,14 @@ try {
+     if (-not (Test-Path -LiteralPath $engine)) { exit 0 }
+ 
+     # helper scripts that ship inside the release but are not strategies
+-    $skip = @('service.bat', 'uninstall_service.bat', 'update.bat', 'check.bat',
+-              'restart.bat', 'run_fast.bat', 'run_general.bat')
++    $skipNames = @('service.bat', 'uninstall_service.bat', 'update.bat', 'check.bat',
++                   'restart.bat', 'run_fast.bat', 'run_general.bat')
++    # zeye's own helpers / leftovers copied into the engine folder
++    $skipPrefixes = @('zeye-', '_zeye')
+ 
+-    foreach ($f in (Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File | Sort-Object Name)) {
+-        if ($skipPrefixes | Where-Object { $f.Name.ToLower().StartsWith($_) }) { continue }
++    foreach ($f in @(Get-ChildItem -LiteralPath $engine -Filter '*.bat' -File | Sort-Object Name)) {
++        if ($f.Name -in $skipNames) { continue }
++        if (@($skipPrefixes | Where-Object { $f.Name.ToLower().StartsWith($_) }).Count -gt 0) { continue }
+         $argLine = ''
+         try {
+             # Flowseal profiles invoke the engine like:
+diff --git a/src/menu.bat b/src/menu.bat
+index 1965105..cb309bd 100644
+--- a/src/menu.bat
++++ b/src/menu.bat
+@@ -99,7 +99,7 @@ for /f "usebackq tokens=1* delims=|" %%F in (`powershell -NoProfile -ExecutionPo
+     set "ARGS_!N!=%%G"
+     if not "%%G"=="" (echo    !N!. %%F  [%%G]) else (echo    !N!. %%F)
+ )
+-if "%N%"=="0" ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
++if %N%==0 ( echo  [zeye] .bat стратегии не найдены в движке. & pause & goto :header )
+ echo.
+ set "SEL="
+ set /p "SEL=  Номер: "
+-- 
+2.39.5
+

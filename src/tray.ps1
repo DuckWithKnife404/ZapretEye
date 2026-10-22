@@ -51,7 +51,9 @@ function Test-EngineRunning {
 }
 
 function Restart-Engine {
-    & taskkill.exe /F /IM winws.exe >$null 2>&1
+    # native Stop-Process: taskkill prints to stderr when winws.exe is absent,
+    # which becomes a terminating error under $ErrorActionPreference = 'Stop'
+    Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
     $bat = (Get-Cfg 'last_profile' '') + '.bat'
     $strat = (Get-Cfg 'default_strategy' '').Replace(' ', '') + '.bat'
@@ -113,7 +115,7 @@ $menu.Items.Add('-') | Out-Null
 # Exit
 $miExit = $menu.Items.Add('Выход')
 $miExit.add_Click({
-    & taskkill.exe /F /IM winws.exe >$null 2>&1
+    Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     $script:exiting = $true
     $notify.Visible = $false
     $notify.Dispose()

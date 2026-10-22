@@ -50,8 +50,9 @@ try {
     Write-Host ('-' * 78)
 
     foreach ($f in $files) {
-        # stop leftovers from previous iteration
-        & taskkill.exe /F /IM winws.exe >$null 2>&1
+        # stop leftovers from previous iteration (taskkill's "process not
+        # found" stderr would abort the script under ErrorActionPreference=Stop)
+        Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 400
 
         # launch the strategy hidden
@@ -78,7 +79,7 @@ try {
         Write-Host ('{0,-42} {1,-8} {2,-10} {3}' -f $f.BaseName, $code, ('{0:N2}' -f $timeD), $verdict)
 
         # stop before testing the next strategy
-        & taskkill.exe /F /IM winws.exe >$null 2>&1
+        Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 400
     }
 

@@ -1,0 +1,112 @@
+From bc926bc2364482d4c0fb05bcfb50f46151d94d5a Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Thu, 22 Oct 2026 02:05:15 +0000
+Subject: [PATCH 1/8] fix(update): taskkill stderr breaks engine download under
+ ErrorActionPreference=Stop
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When winws.exe was not running (fresh install), 'taskkill /F /IM winws.exe'
+printed 'ERROR: The process "winws.exe" not found.' to stderr. PowerShell 5.1
+redirected native stderr into the error stream, and with
+$ErrorActionPreference='Stop' it became a terminating NativeCommandError that
+aborted update.ps1 right before the download - so the first-run engine setup
+always failed with 'Не удалось скачать движок'.
+
+Replaced taskkill in all PS scripts (update.ps1, check.ps1, tray.ps1) with
+native Get-Process/Stop-Process, which never touches stderr when the process
+is absent.
+---
+ src/check.ps1  |  7 ++++---
+ src/tray.ps1   |  6 ++++--
+ src/update.ps1 | 17 +++++++++++++++--
+ 3 files changed, 23 insertions(+), 7 deletions(-)
+
+diff --git a/src/check.ps1 b/src/check.ps1
+index 9bcdbd1..912938d 100644
+--- a/src/check.ps1
++++ b/src/check.ps1
+@@ -50,8 +50,9 @@ try {
+     Write-Host ('-' * 78)
+ 
+     foreach ($f in $files) {
+-        # stop leftovers from previous iteration
+-        & taskkill.exe /F /IM winws.exe >$null 2>&1
++        # stop leftovers from previous iteration (taskkill's "process not
++        # found" stderr would abort the script under ErrorActionPreference=Stop)
++        Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+         Start-Sleep -Milliseconds 400
+ 
+         # launch the strategy hidden
+@@ -78,7 +79,7 @@ try {
+         Write-Host ('{0,-42} {1,-8} {2,-10} {3}' -f $f.BaseName, $code, ('{0:N2}' -f $timeD), $verdict)
+ 
+         # stop before testing the next strategy
+-        & taskkill.exe /F /IM winws.exe >$null 2>&1
++        Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+         Start-Sleep -Milliseconds 400
+     }
+ 
+diff --git a/src/tray.ps1 b/src/tray.ps1
+index 434c41f..ed83b8f 100644
+--- a/src/tray.ps1
++++ b/src/tray.ps1
+@@ -51,7 +51,9 @@ function Test-EngineRunning {
+ }
+ 
+ function Restart-Engine {
+-    & taskkill.exe /F /IM winws.exe >$null 2>&1
++    # native Stop-Process: taskkill prints to stderr when winws.exe is absent,
++    # which becomes a terminating error under $ErrorActionPreference = 'Stop'
++    Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+     Start-Sleep -Milliseconds 500
+     $bat = (Get-Cfg 'last_profile' '') + '.bat'
+     $strat = (Get-Cfg 'default_strategy' '').Replace(' ', '') + '.bat'
+@@ -113,7 +115,7 @@ $menu.Items.Add('-') | Out-Null
+ # Exit
+ $miExit = $menu.Items.Add('Выход')
+ $miExit.add_Click({
+-    & taskkill.exe /F /IM winws.exe >$null 2>&1
++    Get-Process -Name 'winws' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+     $script:exiting = $true
+     $notify.Visible = $false
+     $notify.Dispose()
+diff --git a/src/update.ps1 b/src/update.ps1
+index d20dff4..c31437d 100644
+--- a/src/update.ps1
++++ b/src/update.ps1
+@@ -20,6 +20,16 @@ function Invoke-Curl([string[]]$CurlArgs) {
+     if ($LASTEXITCODE -ne 0) { throw "curl.exe failed (exit $LASTEXITCODE)" }
+ }
+ 
++function Stop-EngineProcesses {
++    # Safely stop winws.exe if it is running. Uses Get-Process/Stop-Process
++    # instead of taskkill.exe: taskkill writes "ERROR: The process ... not
++    # found." to stderr when the process isn't running, and that stderr output
++    # becomes a terminating error under $ErrorActionPreference = 'Stop'.
++    Get-Process -Name 'winws' -ErrorAction SilentlyContinue | ForEach-Object {
++        try { Stop-Process -Id $_.Id -Force -ErrorAction Stop } catch {}
++    }
++}
++
+ function Copy-TreeOver([string]$From, [string]$To) {
+     # Recursively copy $From over $To, skipping protected files
+     if (-not (Test-Path $To)) { New-Item -ItemType Directory -Path $To | Out-Null }
+@@ -76,8 +86,11 @@ try {
+     }
+     Write-Host ('[zeye] Локальная версия: ' + $(if ($local) { $local } else { 'нет' }) + ' -> новая: ' + $latest)
+ 
+-    # stop the engine while replacing binaries
+-    & taskkill.exe /F /IM winws.exe >$null 2>&1
++    # stop the engine while replacing binaries.
++    # NOTE: do NOT use taskkill here - when winws.exe is not running it prints
++    # "ERROR: The process "winws.exe" not found." to stderr, which under
++    # $ErrorActionPreference='Stop' PowerShell turns into a terminating NativeCommandError.
++    Stop-EngineProcesses
+ 
+     # ---- download silently to %TEMP% ---------------------------
+     $zip     = Join-Path $env:TEMP ('zapret-' + $latest + '.zip')
+-- 
+2.39.5
+
