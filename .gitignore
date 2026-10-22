@@ -1,0 +1,12 @@
+# ZapretEye — движок Flowseal/zapret в репозитории не распространяется.
+# Всё это скачивается автообновлением (src/update.ps1) и не коммитится.
+winws.exe
+lists/
+zapret-engine/
+*.zip
+version.txt
+
+# Служебные артефакты
+*.log
+*.vbs.tmp
+Thumbs.db
